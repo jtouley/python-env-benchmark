@@ -1,0 +1,11 @@
+# Core dependencies
+pandas
+numpy
+requests
+flask
+scikit-learn
+black
+
+# Testing
+pytest
+pytest-benchmark

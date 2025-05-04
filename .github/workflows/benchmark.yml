@@ -1,0 +1,169 @@
+name: Python Dependency Management Benchmark
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install hyperfine
+      run: |
+        if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+          sudo apt-get update
+          sudo apt-get install -y hyperfine
+        elif [ "${{ matrix.os }}" == "macos-latest" ]; then
+          brew install hyperfine
+        fi
+    
+    - name: Make scripts executable
+      run: chmod +x scripts/*.sh
+    
+    - name: Install dependencies for tests
+      run: pip install pytest pytest-benchmark
+  
+  benchmark:
+    needs: setup
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10']
+        tool: [make, poetry, piptools, uv]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Make scripts executable
+      run: chmod +x scripts/*.sh
+    
+    - name: Run ${{ matrix.tool }} installation
+      id: install
+      run: |
+        START=$(date +%s.%N)
+        ./scripts/install_${{ matrix.tool }}.sh
+        END=$(date +%s.%N)
+        DIFF=$(echo "$END - $START" | bc)
+        echo "execution_time=$DIFF" >> $GITHUB_OUTPUT
+    
+    - name: Upload benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: benchmark-results-${{ matrix.os }}-${{ matrix.tool }}
+        path: |
+          installation_benchmark_results.json
+          .venv
+  
+  hyperfine:
+    needs: setup
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install hyperfine
+      run: |
+        if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+          sudo apt-get update
+          sudo apt-get install -y hyperfine
+        elif [ "${{ matrix.os }}" == "macos-latest" ]; then
+          brew install hyperfine
+        fi
+    
+    - name: Make scripts executable
+      run: chmod +x scripts/*.sh
+    
+    - name: Install tools
+      run: |
+        if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+          sudo apt-get install -y make
+          curl -sSL https://install.python-poetry.org | python3 -
+          pip install pip-tools
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        elif [ "${{ matrix.os }}" == "macos-latest" ]; then
+          brew install make poetry
+          pip install pip-tools
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+        fi
+    
+    - name: Run hyperfine benchmark
+      run: |
+        hyperfine --warmup 1 \
+          --export-json hyperfine-results.json \
+          --prepare 'rm -rf .venv' \
+          './scripts/install_make.sh' \
+          './scripts/install_poetry.sh' \
+          './scripts/install_piptools.sh' \
+          './scripts/install_uv.sh'
+    
+    - name: Upload hyperfine results
+      uses: actions/upload-artifact@v3
+      with:
+        name: hyperfine-results-${{ matrix.os }}
+        path: hyperfine-results.json
+  
+  pytest-benchmark:
+    needs: benchmark
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.10']
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-benchmark
+        pip install pandas numpy requests flask scikit-learn black
+    
+    - name: Run pytest benchmarks
+      run: |
+        python -m pytest test_benchmark.py::test_import_dependencies -v
+    
+    - name: Upload pytest benchmark results
+      uses: actions/upload-artifact@v3
+      with:
+        name: pytest-benchmark-${{ matrix.os }}
+        path: .pytest_benchmark_results.json

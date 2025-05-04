@@ -1,0 +1,25 @@
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "py-dependency-benchmark"
+version = "0.1.0"
+description = "Benchmark for Python dependency management tools"
+authors = ["Your Name <your.email@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "*"
+numpy = "*"
+requests = "*"
+flask = "*"
+scikit-learn = "*"
+black = "*"
+pytest = "*"
+pytest-benchmark = "*"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pytest-benchmark = "*"
