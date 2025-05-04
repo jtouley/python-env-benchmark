@@ -1,0 +1,11 @@
+# This file will be overwritten by pip-compile
+# To update this file, run:
+# pip-compile requirements.in
+pandas
+numpy
+requests
+flask
+scikit-learn
+black
+pytest
+pytest-benchmark
