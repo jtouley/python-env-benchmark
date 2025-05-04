@@ -7,7 +7,7 @@ cd "$PROJECT_ROOT"
 
 # Ensure poetry is installed
 if ! command -v poetry &> /dev/null; then
-    echo "Installing poetry..."
+    echo "📦 Installing Poetry..."
     if command -v brew &> /dev/null; then
         brew install poetry
     else
@@ -15,36 +15,70 @@ if ! command -v poetry &> /dev/null; then
     fi
 fi
 
-# Clean previous environment if it exists
-rm -rf .venv
+echo "🧹 Cleaning old environment..."
+rm -rf .venv_poetry
 
-# Configure poetry to create virtualenv in project directory
+echo "⚙️  Configuring Poetry to use in-project venv..."
 poetry config virtualenvs.in-project true
 
-# Display poetry version
+# Ensure README exists
+if [ ! -f README.md ]; then
+    echo "📄 Creating basic README.md..."
+    cat > README.md << EOF
+# Python Dependency Benchmark
+Testing Poetry dependency management
+EOF
+fi
+
+# Create or ensure pyproject.toml exists
+if [ ! -f pyproject.toml ]; then
+    echo "📄 Creating basic pyproject.toml..."
+    cat > pyproject.toml << EOF
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+name = "py-dependency-benchmark"
+version = "0.1.0"
+description = "Benchmark for Python dependency management tools"
+authors = ["Benchmark User <user@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+pandas = "*"
+numpy = "*"
+requests = "*"
+flask = "*"
+scikit-learn = "*"
+black = "*"
+pytest = "*"
+pytest-benchmark = "*"
+EOF
+fi
+
+# Display Poetry version
 poetry --version
 
-# Time the installation
-echo "Running poetry installation..."
+# Time the install
+echo "🚀 Installing dependencies..."
 START=$(date +%s.%N)
 
-# Install dependencies
-poetry install
+poetry install --no-interaction --no-root
 
 END=$(date +%s.%N)
 DIFF=$(echo "$END - $START" | bc)
-echo "Poetry installation completed in $DIFF seconds"
+echo "✅ Poetry installation completed in $DIFF seconds"
 
 # Show installed packages
-echo "Installed packages:"
-poetry run pip freeze
+echo "📦 Installed packages:"
+poetry run pip freeze | sort
 
-# Output environment hash for reproducibility check
-echo "Environment hash:"
-poetry run pip freeze | sort | md5sum
-
-# Generate lock file if it doesn't exist
-if [ ! -f poetry.lock ]; then
-    echo "Creating poetry.lock file..."
-    poetry lock
+# Output environment hash
+echo "🔐 Environment hash:"
+if command -v md5sum &> /dev/null; then
+    poetry run pip freeze | sort | md5sum
+else
+    poetry run pip freeze | sort | md5
 fi

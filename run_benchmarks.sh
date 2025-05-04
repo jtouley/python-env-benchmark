@@ -20,10 +20,12 @@ check_command() {
 }
 
 # Create directory structure
-mkdir -p scripts benchmark_results
+mkdir -p scripts benchmark_results benchmark_tmp
+echo "✅ Created directory structure"
 
 # Ensure all scripts are executable
 chmod +x scripts/*.sh
+echo "✅ Made scripts executable"
 
 # Check for required tools
 print_header "Checking dependencies"
@@ -31,11 +33,41 @@ print_header "Checking dependencies"
 check_command python3 "You can install Python from https://www.python.org/downloads/"
 check_command pip "Should be installed with Python"
 
-if ! check_command hyperfine "For macOS: brew install hyperfine, For Ubuntu: sudo apt install hyperfine"; then
-    USE_HYPERFINE=false
-    echo "ℹ️ Hyperfine not found. Will skip hyperfine benchmarks."
-    echo "   To install on macOS: brew install hyperfine"
-    echo "   To install on Ubuntu: sudo apt install hyperfine"
+# Check for hyperfine with interactive prompt
+if ! command -v hyperfine &> /dev/null; then
+    echo "❌ hyperfine is not installed"
+    echo "Hyperfine is recommended for accurate benchmarking."
+    
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        read -p "Would you like to install hyperfine using Homebrew? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Installing hyperfine with Homebrew..."
+            brew install hyperfine
+            USE_HYPERFINE=true
+        else
+            USE_HYPERFINE=false
+            echo "Skipping hyperfine benchmarks."
+        fi
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        read -p "Would you like to install hyperfine? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Installing hyperfine with apt..."
+            sudo apt update && sudo apt install -y hyperfine
+            USE_HYPERFINE=true
+        else
+            USE_HYPERFINE=false
+            echo "Skipping hyperfine benchmarks."
+        fi
+    else
+        USE_HYPERFINE=false
+        echo "Unsupported OS for automatic installation. Skipping hyperfine benchmarks."
+        echo "To install manually:"
+        echo "   - macOS: brew install hyperfine"
+        echo "   - Ubuntu/Debian: sudo apt install hyperfine"
+        echo "   - Others: see https://github.com/sharkdp/hyperfine#installation"
+    fi
 else
     USE_HYPERFINE=true
     echo "✅ Hyperfine found"
@@ -64,23 +96,50 @@ pip install pandas matplotlib pytest pytest-benchmark
 # Run the benchmarks
 print_header "Running installation benchmarks"
 python test_benchmark.py
+BENCHMARK_EXIT=$?
 
 print_header "Testing reproducibility"
 python test_reproducibility.py
+REPRO_EXIT=$?
 
-print_header "Evaluating developer experience"
+print_header "Evaluating developer experience" 
 python evaluate_dx.py
+DX_EXIT=$?
 
 # Run hyperfine benchmarks if available
 if [ "$USE_HYPERFINE" = true ]; then
     print_header "Running hyperfine benchmarks"
+    
+    # Ensure all required files exist
+    touch requirements.txt requirements.in README.md
+    
+    # Prepare for hyperfine benchmark
+    mkdir -p benchmark_tmp/{make,poetry,piptools,uv}
+    
+    # Copy necessary files to each directory
+    for dir in benchmark_tmp/{make,poetry,piptools,uv}; do
+        cp requirements.txt requirements.in README.md pyproject.toml Makefile $dir/
+        mkdir -p $dir/scripts
+        cp scripts/install_*.sh $dir/scripts/
+        chmod +x $dir/scripts/*.sh
+    done
+    
+    # Run hyperfine with --ignore-failure to ensure all tools are benchmarked
     hyperfine --warmup 1 \
+        --ignore-failure \
         --export-json benchmark_results/hyperfine-results.json \
-        --prepare 'rm -rf .venv' \
-        './scripts/install_make.sh' \
-        './scripts/install_poetry.sh' \
-        './scripts/install_piptools.sh' \
-        './scripts/install_uv.sh'
+        --prepare 'rm -rf benchmark_tmp/make/.venv_make' \
+        'cd benchmark_tmp/make && ./scripts/install_make.sh' \
+        --prepare 'rm -rf benchmark_tmp/poetry/.venv_poetry' \
+        'cd benchmark_tmp/poetry && ./scripts/install_poetry.sh' \
+        --prepare 'rm -rf benchmark_tmp/piptools/.venv_piptools' \
+        'cd benchmark_tmp/piptools && ./scripts/install_piptools.sh' \
+        --prepare 'rm -rf benchmark_tmp/uv/.venv_uv' \
+        'cd benchmark_tmp/uv && ./scripts/install_uv.sh'
+    
+    HYPERFINE_EXIT=$?
+else
+    HYPERFINE_EXIT=0
 fi
 
 # Generate the report

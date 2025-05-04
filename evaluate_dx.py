@@ -84,7 +84,7 @@ def run_command(command, cwd=None, capture_error=True):
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=120,  # 2 minutes timeout
+            timeout=180,  # 3 minutes timeout
         )
         return {
             "command": command,
@@ -94,11 +94,12 @@ def run_command(command, cwd=None, capture_error=True):
             "success": result.returncode == 0,
         }
     except subprocess.TimeoutExpired:
+        print(f"Command timed out after 180 seconds: {command}")
         return {
             "command": command,
             "returncode": -1,
             "stdout": "",
-            "stderr": "Command timed out after 120 seconds",
+            "stderr": "Command timed out after 180 seconds",
             "success": False,
         }
     except Exception as e:
@@ -117,15 +118,39 @@ def run_command(command, cwd=None, capture_error=True):
 def prepare_environment(tool, tmp_dir):
     """Prepare the environment for a tool."""
     # Copy necessary files
-    for file in ["pyproject.toml", "requirements.in", "Makefile"]:
+    for file in ["pyproject.toml", "requirements.in", "requirements.txt", "Makefile", "README.md"]:
         if os.path.exists(file):
             shutil.copy(file, tmp_dir)
+        else:
+            # Create the file if it doesn't exist
+            with open(os.path.join(tmp_dir, file), 'w') as f:
+                if file == "requirements.txt":
+                    f.write("# Core dependencies\npandas\nnumpy\nrequests\nflask\nscikit-learn\nblack\n\n# Testing\npytest\npytest-benchmark\n")
+                elif file == "requirements.in":
+                    f.write("# Core dependencies\npandas\nnumpy\nrequests\nflask\nscikit-learn\nblack\n\n# Testing\npytest\npytest-benchmark\n")
+                elif file == "README.md":
+                    f.write("# Python Dependency Benchmark\nTesting dependency management tools\n")
+                elif file == "pyproject.toml":
+                    f.write('[build-system]\nrequires = ["poetry-core>=1.0.0"]\nbuild-backend = "poetry.core.masonry.api"\n\n[tool.poetry]\nname = "py-dependency-benchmark"\nversion = "0.1.0"\ndescription = "Benchmark for Python dependency management tools"\nauthors = ["Your Name <your.email@example.com>"]\nreadme = "README.md"\n\n[tool.poetry.dependencies]\npython = "^3.10"\npandas = "*"\nnumpy = "*"\nrequests = "*"\nflask = "*"\nscikit-learn = "*"\nblack = "*"\npytest = "*"\npytest-benchmark = "*"\n')
     
     # Create scripts directory
     os.makedirs(os.path.join(tmp_dir, "scripts"), exist_ok=True)
-    script_path = os.path.join(tmp_dir, "scripts", f"install_{tool}.sh")
-    shutil.copy(f"scripts/install_{tool}.sh", script_path)
-    os.chmod(script_path, 0o755)  # Make executable
+    
+    # Check if installation script exists
+    script_path = f"scripts/install_{tool}.sh"
+    if not os.path.exists(script_path):
+        return {
+            "command": f"./scripts/install_{tool}.sh",
+            "returncode": 1,
+            "stdout": "",
+            "stderr": f"Installation script {script_path} not found",
+            "success": False,
+        }
+    
+    # Copy installation script
+    dest_script_path = os.path.join(tmp_dir, "scripts", f"install_{tool}.sh")
+    shutil.copy(script_path, dest_script_path)
+    os.chmod(dest_script_path, 0o755)  # Make executable
     
     # Run installation
     return run_command(f"./scripts/install_{tool}.sh", cwd=tmp_dir)
